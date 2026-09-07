@@ -1,5 +1,7 @@
 # Large raw/processed calibration data (h5, csv, video captures, etc.)
+# Keep the empty data/ folder itself tracked (see data/.gitkeep) so it exists on clone.
 data/*
+!data/.gitkeep
 
 # Python
 __pycache__/
