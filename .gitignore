@@ -1,0 +1,16 @@
+# Large raw/processed calibration data (h5, csv, video captures, etc.)
+data/*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+env/
+
+# Editor / OS
+.vscode/
+.DS_Store
+
+# PlatformIO build artifacts (Teensy firmware)
+hardware_files/Teensy/.pio/
+hardware_files/Teensy/.vscode/
