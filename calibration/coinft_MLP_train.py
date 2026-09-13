@@ -14,8 +14,9 @@ LEARNING_RATE = 1e-3
 EPOCHS = 30
 L2_REG = 1e-4  # L2 Regularization
 SEED = 42
+SENSOR_CODE = "3"
 SENSOR_NAME = "CFT24"
-MODEL_NAME = f"{SENSOR_NAME}_MLP"
+MODEL_NAME = f"{SENSOR_NAME}_C{SENSOR_CODE}_MLP"
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(SCRIPT_DIR, '..', 'data')
@@ -160,7 +161,7 @@ def train_pipeline():
     print("\nEvaluating on Test Set...")
     
     # Load Normalization Constants
-    with open(os.path.join(CONFIG_DIR, f'{SENSOR_NAME}_norm.json'), 'r') as f:
+    with open(os.path.join(CONFIG_DIR, f'{SENSOR_NAME}_C{SENSOR_CODE}_norm.json'), 'r') as f:
         norm = json.load(f)
         mu_y = np.array(norm['mu_y'])
         sd_y = np.array(norm['sd_y'])
