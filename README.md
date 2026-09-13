@@ -23,6 +23,10 @@ The pipeline has five stages:
 - Python 3, with `numpy`, `scipy`, `matplotlib`, `h5py`, `pandas`, `pyserial`, `pytorch`, `onnx`, `onnxruntime`
 - `pysoem` — only needed for the EtherCAT (ATI Mini58) path
 
+- ```bash
+  pip install numpy pyserial h5py matplotlib torch scikit-learn scipy onnxruntime pandas nidaqmx pysoem
+```
+
 ---
 
 ## The calibration workflow
