@@ -7,6 +7,7 @@ intergrated_ati_data_collection_MINI_fixed.py for the same transport used by
 the calibration collector. ATI and CoinFT are tared together in one shared
 wall-clock window so both zero references describe the same unloaded instant.
 """
+import ctypes
 import json
 import os
 import queue
@@ -30,7 +31,7 @@ from matplotlib.widgets import Button, CheckButtons
 #########################
 
 # ---------- CoinFT serial ----------
-COM_NAME = "COM5"
+COM_NAME = "COM9"
 BAUD_RATE = 1_000_000
 START_BYTE = 2
 END_BYTE = 3
@@ -42,6 +43,16 @@ ATI_VENDOR_ID = 0x00000732
 ATI_OUTPUT_RATE_HZ = 1000.0
 ATI_PROCESSDATA_TIMEOUT_US = 2000
 ATI_STATE_TIMEOUT_US = 50000
+
+# The EtherCAT cycle itself still runs at ATI_OUTPUT_RATE_HZ, but pushing a
+# lock + queue-put to the plotting side on every single cycle makes the
+# acquisition thread re-enter Python/GIL-visible work 1000x/sec, which starves
+# the matplotlib main thread of the long, uninterrupted slices it needs to
+# draw a frame. Batching live samples at this rate instead (~200Hz, matching
+# the reference-sensor script's 5-sample NI-DAQ buffer) cuts that 5x while
+# keeping the ATI ground-truth curve's time resolution well above the 20fps
+# display rate.
+ATI_PLOT_PUBLISH_HZ = 200.0
 
 # The ECATBA's default TxPDO is six int32 F/T counts (Fx Fy Fz Mx My Mz) at
 # the start of the input image -- see ATI's read_vals.c reference. These
@@ -72,8 +83,8 @@ ANIMATION_INTERVAL_MS = 50
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
-MODEL_PATH = os.path.join(PROJECT_ROOT, "hardware_configs", "CFT24_MLP.onnx")
-NORM_PATH = os.path.join(PROJECT_ROOT, "hardware_configs", "CFT24_norm.json")
+MODEL_PATH = os.path.join(PROJECT_ROOT, "hardware_configs", "CFT24_C3_MLP.onnx")
+NORM_PATH = os.path.join(PROJECT_ROOT, "hardware_configs", "CFT24_C3_norm.json")
 
 
 #########################
@@ -131,6 +142,26 @@ def put_queue_without_deadlock(target_queue, item):
             target_queue.put_nowait(item)
         except queue.Full:
             pass
+
+
+def raise_windows_timer_resolution():
+    """Windows defaults to a ~15.6ms scheduler/timer tick, so a time.sleep()
+    call for a sub-millisecond remainder (as used to pace the 1kHz EtherCAT
+    loop) routinely oversleeps by an order of magnitude and wakes up in
+    uneven bursts. winmm's 1ms multimedia timer resolution keeps that pacing
+    loop -- and therefore its GIL contention with the plotting thread --
+    predictable. No-op (returns False) on non-Windows platforms."""
+    try:
+        return ctypes.windll.winmm.timeBeginPeriod(1) == 0
+    except (AttributeError, OSError):
+        return False
+
+
+def restore_windows_timer_resolution():
+    try:
+        ctypes.windll.winmm.timeEndPeriod(1)
+    except (AttributeError, OSError):
+        pass
 
 
 def moving_average_2d(arr, window=5):
@@ -202,14 +233,14 @@ def open_ati_master():
 
     # Prime one valid exchange before requesting OP -- slaves refuse the OP
     # request until they have received at least one process-data frame.
-    master.send_processdata()
-    master.receive_processdata(ATI_PROCESSDATA_TIMEOUT_US)
+    master.send_processdata(release_gil=True)
+    master.receive_processdata(ATI_PROCESSDATA_TIMEOUT_US, release_gil=True)
     master.state = pysoem.OP_STATE
     master.write_state()
 
     for _ in range(40):
-        master.send_processdata()
-        master.receive_processdata(ATI_PROCESSDATA_TIMEOUT_US)
+        master.send_processdata(release_gil=True)
+        master.receive_processdata(ATI_PROCESSDATA_TIMEOUT_US, release_gil=True)
         if master.state_check(pysoem.OP_STATE, ATI_STATE_TIMEOUT_US) == pysoem.OP_STATE:
             break
     else:
@@ -227,8 +258,8 @@ def open_ati_master():
 
 def read_ati_sample(master, slave):
     """One EtherCAT cycle. Returns (ft, mono_time, unix_time) or None on a bad WKC."""
-    master.send_processdata()
-    wkc = master.receive_processdata(ATI_PROCESSDATA_TIMEOUT_US)
+    master.send_processdata(release_gil=True)
+    wkc = master.receive_processdata(ATI_PROCESSDATA_TIMEOUT_US, release_gil=True)
     mono = time.perf_counter()
     unix_time = time.time()
 
@@ -479,6 +510,10 @@ def read_ati_ethercat(master, slave):
     period = 1.0 / ATI_OUTPUT_RATE_HZ
     next_cycle = time.perf_counter()
 
+    publish_period = 1.0 / ATI_PLOT_PUBLISH_HZ
+    next_publish = time.perf_counter()
+    pending_batch = []
+
     try:
         while not stop_flag:
             sample = read_ati_sample(master, slave)
@@ -494,10 +529,16 @@ def read_ati_ethercat(master, slave):
                     sample_data = raw_ft - ATI_TARE
                     sample_data[3] += sample_data[1] * M_ARM
                     sample_data[4] -= sample_data[0] * M_ARM
+                    pending_batch.append((unix_time, sample_data))
 
-                    with ati_lock:
-                        latest_ati = sample_data.copy()
-                    put_queue_without_deadlock(ati_queue, (unix_time, sample_data))
+            now_perf = time.perf_counter()
+            if pending_batch and now_perf >= next_publish:
+                with ati_lock:
+                    latest_ati = pending_batch[-1][1].copy()
+                for item in pending_batch:
+                    put_queue_without_deadlock(ati_queue, item)
+                pending_batch.clear()
+                next_publish = now_perf + publish_period
 
             next_cycle += period
             now = time.perf_counter()
@@ -505,6 +546,12 @@ def read_ati_ethercat(master, slave):
                 time.sleep(next_cycle - now)
             else:
                 next_cycle = now
+
+        if pending_batch:
+            with ati_lock:
+                latest_ati = pending_batch[-1][1].copy()
+            for item in pending_batch:
+                put_queue_without_deadlock(ati_queue, item)
 
     except Exception as exc:
         ati_thread_error = exc
@@ -608,10 +655,12 @@ def update_plot(_frame):
 
     have_ati = t_ati_store.size > 0
     if have_ati:
-        ati_plot_data = moving_average_2d(ati_data_store, window=MOVING_AVG_WINDOW)
+        # Plotted raw (unsmoothed), matching the reference-sensor script --
+        # smoothing the ATI ground truth too only doubles the per-frame
+        # convolution cost without a real display benefit.
         matched_indices = np.searchsorted(t_ati_store, t_sens_store, side="right") - 1
         matched_indices = np.clip(matched_indices, 0, t_ati_store.size - 1)
-        ati_plot_matched = ati_plot_data[matched_indices, :]
+        ati_plot_matched = ati_data_store[matched_indices, :]
     else:
         # Leave the ATI curves blank rather than drawing a flat zero line that
         # would look like a real unloaded reading.
@@ -787,6 +836,7 @@ def main():
     ati_thread = None
     coinft_thread = None
     master = None
+    timer_resolution_raised = raise_windows_timer_resolution()
 
     try:
         master, slave = open_ati_master()
@@ -845,6 +895,8 @@ def main():
             ati_thread.join(timeout=3.0)
 
         close_hardware(master)
+        if timer_resolution_raised:
+            restore_windows_timer_resolution()
         print(f"ATI diagnostics: {ati_diagnostics}")
         save_recorded_data()
         print("Stopped.")
