@@ -1,27 +1,4 @@
 #!/usr/bin/env python3
-"""
-data_processor_ver2.py
-
-Merges the two earlier processors:
-
-  * data_processor_origin.py reads EVERY calibration file and lets the
-    train/val/test split follow the ID suffix written at collection time.
-  * data_processor.py adds the [raw, raw**2] quadratic features but only ever
-    used the single newest file.
-
-This version keeps both: all matching files are loaded, the split follows the
-filename suffix when it is available, and the quadratic features are preserved.
-An ATI_MODEL_TAG filter selects one reference-sensor campaign without having to
-move files around.
-
-Expected filename layout (written by the intergrated_ati_data_collection_*
-scripts):
-
-    {SENSOR_NAME}_calibrationData_{YYYYmmdd}_{HHMMSS}_{ATI_MODEL_TAG}_{ID}.h5
-
-ATI_MODEL_TAG may itself contain underscores (e.g. Mini58_ECATBA); the last
-token before ".h5" is always the ID.
-"""
 
 import glob
 import json
@@ -50,19 +27,21 @@ ATI_MODEL_TAG = 'Mini58_ECATBA'
 SPLIT_MODE = 'auto'
 
 # [raw, raw**2] features. False reproduces the 12-dimensional original.
-USE_QUADRATIC_FEATURES = True
+USE_QUADRATIC_FEATURES = False
 
 TRAIN_RATIO = 0.70
 VAL_RATIO = 0.15
 TEST_RATIO = 0.15
 RANDOM_SEED = 42
 
+SENSOR_CODE = "3"
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(SCRIPT_DIR, '..', 'data')
 SAVE_DATA_DIR = os.path.join(SCRIPT_DIR, '..', 'data')
 SAVE_JSON_DIR = os.path.join(SCRIPT_DIR, '..', 'hardware_configs')
-JSON_FILENAME = f'{SENSOR_NAME}_norm.json'
-MANIFEST_FILENAME = f'{SENSOR_NAME}_dataset_manifest.json'
+JSON_FILENAME = f'{SENSOR_NAME}_C{SENSOR_CODE}_norm.json'
+MANIFEST_FILENAME = f'{SENSOR_NAME}_C{SENSOR_CODE}_dataset_manifest.json'
 # ============================================================
 
 SPLIT_NAMES = ('train', 'val', 'test')
