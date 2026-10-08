@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Live CoinFT vs. ATI Mini58 (EtherCAT/ECATBA) visualization.
 
-ATI is read over EtherCAT via pysoem instead of NI-DAQ analog voltage, so no
-strain-gauge calibration matrix is needed -- see
-intergrated_ati_data_collection_MINI_fixed.py for the same transport used by
-the calibration collector. ATI and CoinFT are tared together in one shared
-wall-clock window so both zero references describe the same unloaded instant.
-"""
 import ctypes
 import json
 import os
@@ -77,14 +70,14 @@ M_ARM = 0.0115  # m
 PLOT_DURATION = 10.0
 MOVING_AVG_WINDOW = 20
 MAX_QUEUE_SIZE = 10_000
-ANIMATION_INTERVAL_MS = 50
+ANIMATION_INTERVAL_MS = 25
 
 # ---------- File paths ----------
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
-MODEL_PATH = os.path.join(PROJECT_ROOT, "hardware_configs", "CFT24_C3_MLP.onnx")
-NORM_PATH = os.path.join(PROJECT_ROOT, "hardware_configs", "CFT24_C3_norm.json")
+MODEL_PATH = os.path.join(PROJECT_ROOT, "hardware_configs", "CFT24_C2_MLP.onnx")
+NORM_PATH = os.path.join(PROJECT_ROOT, "hardware_configs", "CFT24_C2_norm.json")
 
 
 #########################

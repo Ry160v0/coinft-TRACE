@@ -23,7 +23,7 @@ import serial
 #########################
 
 # --- CoinFT serial ---
-COM_NAME = "COM5"
+COM_NAME = "COM9"
 BAUD_RATE = 1_000_000
 
 # --- ATI Mini58 + ECATBA / EtherCAT ---

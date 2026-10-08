@@ -3,19 +3,19 @@
 // ==========================================
 // USER CONFIGURATION
 // ==========================================
-#define NUM_COINFTS  2   // Currently supports 1 or 2. You can easily extend to more CoinFTs by modifying the code.
+#define NUM_COINFTS  1   // Currently supports 1 or 2. You can easily extend to more CoinFTs by modifying the code.
 // ==========================================
 
 // Use built-in IntervalTimer for Teensy 4.0
 IntervalTimer myTimer;
 
 // Hardware Serial Definitions
-#define CFT1  Serial2
+#define CFT1  Serial4
 #if NUM_COINFTS == 2
   #define CFT2  Serial3
 #endif
 
-// Variables
+// Variablesre
 byte data1[24] = { 0 };
 volatile bool newData1 = false;
 

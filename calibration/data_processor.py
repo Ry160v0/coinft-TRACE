@@ -34,7 +34,7 @@ VAL_RATIO = 0.15
 TEST_RATIO = 0.15
 RANDOM_SEED = 42
 
-SENSOR_CODE = "3"
+SENSOR_CODE = "2"
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(SCRIPT_DIR, '..', 'data')

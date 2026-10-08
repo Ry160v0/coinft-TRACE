@@ -1,0 +1,33 @@
+{
+  "sensor_name": "CFT24",
+  "ati_model_tag": "Mini58_ECATBA",
+  "split_mode_requested": "auto",
+  "split_mode_used": "filename",
+  "use_quadratic_features": false,
+  "input_dim": 12,
+  "random_seed": 42,
+  "splits": {
+    "train": [
+      "CFT24_calibrationData_20261005_150340_Mini58_ECATBA_train.h5",
+      "CFT24_calibrationData_20261005_150442_Mini58_ECATBA_train.h5",
+      "CFT24_calibrationData_20261005_150540_Mini58_ECATBA_train.h5",
+      "CFT24_calibrationData_20261005_150708_Mini58_ECATBA_train.h5",
+      "CFT24_calibrationData_20261005_150812_Mini58_ECATBA_train.h5"
+    ],
+    "val": [
+      "CFT24_calibrationData_20261005_150910_Mini58_ECATBA_val.h5",
+      "CFT24_calibrationData_20261005_151017_Mini58_ECATBA_val.h5",
+      "CFT24_calibrationData_20261005_151119_Mini58_ECATBA_val.h5",
+      "CFT24_calibrationData_20261005_151218_Mini58_ECATBA_val.h5",
+      "CFT24_calibrationData_20261005_151352_Mini58_ECATBA_val.h5"
+    ],
+    "test": [
+      "CFT24_calibrationData_20261005_151526_Mini58_ECATBA_test.h5"
+    ]
+  },
+  "rows": {
+    "train": 13360,
+    "val": 13359,
+    "test": 2672
+  }
+}
