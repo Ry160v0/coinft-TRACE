@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""Send filtered 3CFT readings as UTF-8 JSON UDP datagrams.
-
-Each datagram contains time_s (seconds since acquisition started) and a sensors
-list with name, Fx, Fy, Fz, Mx, My, and Mz for each configured sensor.
-"""
 
 import json
 import os
