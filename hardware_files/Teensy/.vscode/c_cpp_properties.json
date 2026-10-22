@@ -8,7 +8,7 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "D:/Desktop/CoinFT/coin-ft-main/hardware_files/Teensy",
+                "D:/Desktop/CoinFT/coinft-TRACE/hardware_files/Teensy",
                 "C:/Users/Ry16/.platformio/packages/framework-arduinoteensy/cores/teensy4",
                 "C:/Users/Ry16/.platformio/packages/framework-arduinoteensy/libraries/ADC",
                 "C:/Users/Ry16/.platformio/packages/framework-arduinoteensy/libraries/AccelStepper/src",
@@ -114,7 +114,7 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "D:/Desktop/CoinFT/coin-ft-main/hardware_files/Teensy",
+                    "D:/Desktop/CoinFT/coinft-TRACE/hardware_files/Teensy",
                     "C:/Users/Ry16/.platformio/packages/framework-arduinoteensy/cores/teensy4",
                     "C:/Users/Ry16/.platformio/packages/framework-arduinoteensy/libraries/ADC",
                     "C:/Users/Ry16/.platformio/packages/framework-arduinoteensy/libraries/AccelStepper/src",

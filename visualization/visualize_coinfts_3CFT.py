@@ -25,7 +25,7 @@ import os
 # =========================
 # User Configuration
 # =========================
-NUM_COINFTS  = 3   # Currently supports 1, 2, or 3 CoinFTs. The number of CoinFTs can be easily expanded by modifying the code.
+NUM_COINFTS  = 2   # Currently supports 1, 2, or 3 CoinFTs. The number of CoinFTs can be easily expanded by modifying the code.
 
 # UART Settings
 PORT_NAME    = "COM8"
@@ -38,9 +38,9 @@ CONFIG_DIR = os.path.join(SCRIPT_DIR, '..', 'hardware_configs')
 
 # Sensor / Model Settings
 # List ALL potential models here. The script will slice this list based on NUM_COINFTS.
-ALL_MODEL_FILES = ['CFT24_C1_MLP.onnx', 'CFT24_C2_MLP.onnx', 'CFT24_C3_MLP.onnx']
-ALL_NORM_FILES  = ['CFT24_C1_norm.json', 'CFT24_C2_norm.json', 'CFT24_C3_norm.json']
-ALL_LABELS      = ['Left Sensor', 'Right Sensor', 'Top Sensor']
+ALL_MODEL_FILES = ['CFT24_C1_MLP.onnx', 'CFT24_C3_MLP.onnx', 'CFT24_C3_MLP.onnx']
+ALL_NORM_FILES  = ['CFT24_C1_norm.json', 'CFT24_C3_norm.json', 'CFT24_C3_norm.json']
+ALL_LABELS      = ['CFT1', 'CFT3', 'CFT3']
 
 # Apply Selection
 MODEL_FILES = ALL_MODEL_FILES[:NUM_COINFTS]
