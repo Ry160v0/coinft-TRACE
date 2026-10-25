@@ -20,6 +20,8 @@ Run these commands from the project root on each host. Set `ROBOT_IP` in
 Start the recorder on PC first:
 
 ```bash
+
+
 python deployment/coinft_record_testVer.py --port 5560
 ```
 

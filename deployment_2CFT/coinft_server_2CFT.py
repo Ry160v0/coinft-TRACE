@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Publish unprocessed CoinFT USB frames over ZMQ PUB (single-frame JSON).
-
-Requires pyserial and pyzmq. Start recorders before starting acquisition.
-PUB/SUB has no delivery acknowledgement or replay; sequence gaps reveal loss.
-"""
+"""Tare CoinFT counts at startup, then publish them over ZMQ PUB."""
 
 import argparse
 import logging
@@ -17,13 +13,16 @@ import uuid
 import serial
 import zmq
 
-
 # Match the Teensy firmware's sensor count and Serial2 / Serial3 order.
+VERSION = 2
+PROCESSING = "server_tared"
+CHANNELS = 12
 DEVICE = "/dev/ttyACM0"
 BAUD_RATE = 115200
 DEFAULT_PORT = 5560
 SENSORS = (("CFT1", "CFT24_C1"), ("CFT2", "CFT24_C3"))
-CHANNELS = 12
+TARE_FRAMES = 500
+TARE_SKIP = 10
 READ_TIMEOUT = 0.1
 IDLE_TIMEOUT = 2.0
 RETRY_DELAY = 1.0  # Retry USB startup only; errors after the first frame are fatal.
@@ -55,8 +54,37 @@ def read_frame(port, stop, decoder):
     }
 
 
+class InitialTare:
+    """Average unloaded USB counts once; never round the channel offsets."""
+
+    def __init__(self, frames=TARE_FRAMES, skip=TARE_SKIP):
+        if type(frames) is not int or type(skip) is not int or not 0 <= skip < frames:
+            raise ValueError("Require 0 <= tare_skip < tare_frames")
+        self.frames = frames
+        self.skip = skip
+        self.collected = 0
+        self.sums = [[0] * CHANNELS for _ in SENSORS]
+        self.metadata = None
+
+    def collect(self, raw):
+        self.collected += 1
+        if self.collected > self.skip:
+            for sums, channels in zip(self.sums, raw):
+                for i, value in enumerate(channels):
+                    sums[i] += value
+        if self.collected == self.frames:
+            offsets = [[v / (self.frames - self.skip) for v in sums] for sums in self.sums]
+            self.metadata = {"frames": self.frames, "skip": self.skip, "offsets": offsets}
+            logging.info("Tare complete: averaged %d frames per sensor.", self.frames - self.skip)
+            logging.info("Publishing tared data.")
+
+    def apply(self, raw):
+        return [[value - offset for value, offset in zip(channels, offsets)]
+                for channels, offsets in zip(raw, self.metadata["offsets"])]
+
+
 class Acquisition(threading.Thread):
-    def __init__(self, stop, device=DEVICE):
+    def __init__(self, stop, device=DEVICE, tare_frames=TARE_FRAMES, tare_skip=TARE_SKIP):
         super().__init__(name="coinft-usb", daemon=True)
         self.stop = stop
         self.device = device
@@ -64,6 +92,7 @@ class Acquisition(threading.Thread):
         self.error = None
         self.stream_id = uuid.uuid4().hex
         self.seq = 0
+        self.tare = InitialTare(tare_frames, tare_skip)
 
     def run(self):
         decoder = struct.Struct(f"<{CHANNELS * len(SENSORS)}H")
@@ -82,16 +111,25 @@ class Acquisition(threading.Thread):
                     port.reset_input_buffer()
                     port.write(b"s")
                     port.flush()
-                    logging.info("Reading raw frames from %s; stream_id=%s", self.device, self.stream_id)
+                    logging.info("Reading USB frames from %s; stream_id=%s", self.device, self.stream_id)
+                    logging.info("Tare starting: keep all sensors unloaded for %d frames "
+                                 "(skip first %d). No data is published until tare completes.",
+                                 self.tare.frames, self.tare.skip)
 
                     while not self.stop.is_set():
                         frame = read_frame(port, self.stop, decoder)
                         if frame is None:
                             break
+                        raw = frame.pop("raw")
+                        if self.tare.metadata is None:
+                            self.tare.collect(raw)
+                            continue
                         self.seq += 1
                         frame.update(
-                            version=1, stream_id=self.stream_id,
+                            version=VERSION, stream_id=self.stream_id,
                             seq=self.seq, sensors=SENSORS,
+                            processing=PROCESSING, tared=self.tare.apply(raw),
+                            tare=self.tare.metadata,
                         )
                         try:
                             self.frames.put_nowait(frame)
@@ -100,7 +138,7 @@ class Acquisition(threading.Thread):
                                 f"USB queue overflow at seq={self.seq}; stopping acquisition"
                             ) from exc
                 except (OSError, ValueError) as exc:
-                    if self.seq:
+                    if self.tare.collected:
                         raise
                     if not self.stop.is_set():
                         logging.warning("USB startup: %s; retry in %.1fs", exc, RETRY_DELAY)
@@ -114,19 +152,25 @@ class Acquisition(threading.Thread):
                 self.stop.wait(RETRY_DELAY)
         except Exception as exc:
             self.error = exc
+            logging.error("CoinFT %s failed: %s",
+                          "tare" if self.tare.metadata is None else "acquisition", exc)
             self.stop.set()
+        finally:
+            if self.tare.metadata is None:
+                logging.warning("Tare incomplete: %d/%d frames collected; no data published.",
+                                self.tare.collected, self.tare.frames)
 
 
-def serve(stop, port=DEFAULT_PORT, device=DEVICE):
+def serve(stop, port=DEFAULT_PORT, device=DEVICE, tare_frames=TARE_FRAMES, tare_skip=TARE_SKIP):
     endpoint = f"tcp://0.0.0.0:{port}"
-    acquisition = Acquisition(stop, device)
+    acquisition = Acquisition(stop, device, tare_frames, tare_skip)
     sent = 0
     with zmq.Context() as context, context.socket(zmq.PUB) as sock:
         sock.setsockopt(zmq.SNDHWM, SEND_HWM)
         sock.setsockopt(zmq.LINGER, 1000)
         sock.bind(endpoint)
+        logging.info("ZMQ bound on %s; waiting for server tare.", endpoint)
         acquisition.start()
-        logging.info("Publishing raw JSON on %s", endpoint)
         try:
             # Drain acquired frames on graceful shutdown or a USB failure.
             while acquisition.is_alive() or not acquisition.frames.empty():
@@ -146,14 +190,20 @@ def serve(stop, port=DEFAULT_PORT, device=DEVICE):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Publish raw CoinFT USB frames over ZMQ.",
+        description="Tare CoinFT counts at startup and publish corrected counts over ZMQ.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="ZMQ TCP port to listen on")
     parser.add_argument("--usb", default=DEVICE, help="USB serial device path")
+    parser.add_argument("--tare-frames", type=int, default=TARE_FRAMES,
+                        help="Total unloaded USB frames, including skipped startup frames")
+    parser.add_argument("--tare-skip", type=int, default=TARE_SKIP,
+                        help="Startup frames excluded from the tare average")
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         parser.error("--port must be between 1 and 65535")
+    if not 0 <= args.tare_skip < args.tare_frames:
+        parser.error("Require 0 <= --tare-skip < --tare-frames")
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     if not 1 <= len(SENSORS) <= 2 or len({name for name, _ in SENSORS}) != len(SENSORS):
@@ -163,7 +213,8 @@ def main():
     stop = threading.Event()
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
-    serve(stop, port=args.port, device=args.usb)
+    serve(stop, port=args.port, device=args.usb,
+          tare_frames=args.tare_frames, tare_skip=args.tare_skip)
 
 
 if __name__ == "__main__":

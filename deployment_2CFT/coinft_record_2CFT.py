@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Record CoinFT raw JSON publications to CSV plus a JSON session manifest.
-
-Requires pyzmq. No tare, filtering, inference, clock correction or resampling.
-The source must run coinft_server_testVer_2CFT.py; the old REP server is incompatible.
-"""
+"""Record server-tared CoinFT counts and per-stream tare metadata."""
 
 import argparse
 import csv
@@ -19,23 +15,24 @@ import time
 
 import zmq
 
-
+VERSION = 2
+PROCESSING = "server_tared"
+CHANNELS = 12
 # Psi0's example robot address: replace with the actual G1 wired-interface IP.
 ROBOT_IP = "192.168.123.164"
 DEFAULT_PORT = 5560
-OUTPUT_DIR = "recordings"  # Relative to this script; each run creates new files.
+OUTPUT_DIR = "raw_data"  # Relative to this script; each run creates new files.
 RECEIVE_HWM = 8192
 QUEUE_SIZE = 8192
 STALL_AFTER = 2.0
 FLUSH_INTERVAL = 1.0  # Buffered writes; flush periodically and on graceful exit.
-CHANNELS = 12
 TIME_COLUMNS = (
     "timestamp_ns", "source_monotonic_ns",
     "received_timestamp_ns", "received_monotonic_ns",
 )
 
 
-class Receiver(threading.Thread): 
+class Receiver(threading.Thread):
     """Own the SUB socket in one thread; enqueue bytes before JSON/CSV work."""
 
     def __init__(self, stop, endpoint):
@@ -61,19 +58,20 @@ class Receiver(threading.Thread):
                         if not stalled and time.monotonic() - last_received >= STALL_AFTER:
                             stalled = True
                             self.stalls += 1
-                            logging.warning("No raw messages for %.1fs; waiting for %s", STALL_AFTER, self.endpoint)
+                            logging.warning("No tared messages for %.1fs; server may still be taring. Waiting for %s",
+                                            STALL_AFTER, self.endpoint)
                         continue
                     payload = sock.recv()
                     received_timestamp_ns = time.time_ns()
                     received_monotonic_ns = time.monotonic_ns()
                     last_received = received_monotonic_ns / 1e9
                     if stalled:
-                        logging.info("Raw messages resumed")
+                        logging.info("Tared messages received")
                         stalled = False
                     try:
                         self.frames.put_nowait((payload, received_timestamp_ns, received_monotonic_ns))
                     except queue.Full as exc:
-                        raise RuntimeError("Recording queue overflow; stopping instead of silently dropping raw") from exc
+                        raise RuntimeError("Recording queue overflow; stopping instead of silently dropping counts") from exc
         except Exception as exc:
             self.error = exc
             self.stop.set()
@@ -82,8 +80,9 @@ class Receiver(threading.Thread):
 def decode_frame(payload):
     """Validate the wire schema before a frame can affect columns or statistics."""
     frame = json.loads(payload)
-    if not isinstance(frame, dict) or type(frame.get("version")) is not int or frame["version"] != 1:
-        raise ValueError("Expected CoinFT raw protocol version 1")
+    if (not isinstance(frame, dict) or type(frame.get("version")) is not int
+            or frame["version"] != VERSION or frame.get("processing") != PROCESSING):
+        raise ValueError("Expected CoinFT protocol version 2 with server-tared counts")
     if not isinstance(frame.get("stream_id"), str) or not frame["stream_id"]:
         raise ValueError("Missing stream_id")
     for key, minimum in (("seq", 1), ("timestamp_ns", 1), ("source_monotonic_ns", 0)):
@@ -98,13 +97,20 @@ def decode_frame(payload):
             raise ValueError("Each sensor must provide [name, calibration_id]")
     if len({sensor[0] for sensor in sensors}) != len(sensors):
         raise ValueError("Sensor names must be unique")
-    raw = frame.get("raw")
-    if not isinstance(raw, list) or len(raw) != len(sensors):
-        raise ValueError("Raw sensor count does not match metadata")
-    for values in raw:
-        if (not isinstance(values, list) or len(values) != CHANNELS
-                or any(type(v) is not int or not 0 <= v <= 65535 for v in values)):
-            raise ValueError("Expected 12 uint16 raw channels per sensor")
+    tare = frame.get("tare")
+    if not isinstance(tare, dict):
+        raise ValueError("Missing server tare metadata")
+    frames, skip = tare.get("frames"), tare.get("skip")
+    if type(frames) is not int or type(skip) is not int or not 0 <= skip < frames:
+        raise ValueError("Invalid server tare frame counts")
+    for values, minimum in ((frame.get("tared"), -65535), (tare.get("offsets"), 0)):
+        if not isinstance(values, list) or len(values) != len(sensors):
+            raise ValueError("Channel data does not match sensor count")
+        for channels in values:
+            if (not isinstance(channels, list) or len(channels) != CHANNELS
+                    or any(type(v) not in (int, float) or not minimum <= v <= 65535
+                           for v in channels)):
+                raise ValueError("Expected 12 numeric channel values per sensor within count range")
     return frame
 
 
@@ -125,12 +131,12 @@ def record(stop, port=DEFAULT_PORT):
     csv_path = output_dir / f"{stem}.csv"
     metadata_path = output_dir / f"{stem}.json"
     metadata = {
-        "version": 1, "status": "recording", "endpoint": endpoint,
+        "version": VERSION, "status": "recording", "endpoint": endpoint,
         "csv_file": csv_path.name, "recorder_host": socket.gethostname(),
         "started_timestamp_ns": time.time_ns(),
         "sensors": None, "channels_per_sensor": CHANNELS,
-        "raw_format": "Unmodified uint16 channel values, in USB packet order",
-        "processing": "None; record an unloaded baseline for later tare/inference",
+        "counts_format": "Signed floating-point counts: raw uint16 minus server tare offsets, in USB packet order",
+        "processing": PROCESSING,
         "clock_sync": "External; not configured or verified by this program",
         "time_fields": {
             "timestamp_ns": "G1 Unix ns at complete USB reception, before decoding",
@@ -151,7 +157,7 @@ def record(stop, port=DEFAULT_PORT):
         receiver.start()
         last_flush = time.monotonic()
         logging.info("Recording %s to %s", endpoint, csv_path)
-        logging.info("Waiting for raw data; include an unloaded baseline. Ctrl+C stops recording.")
+        logging.info("Waiting for server tare to complete; recording starts with the first tared frame. Ctrl+C stops recording.")
         try:
             while receiver.is_alive() or not receiver.frames.empty():
                 try:
@@ -178,9 +184,14 @@ def record(stop, port=DEFAULT_PORT):
                             "first_seq": seq, "last_seq": seq - 1,
                             "frames_before_subscription": seq - 1,
                             "rows_written": 0, "missing_frames": 0,
+                            "tare": frame["tare"],
                         }
                         logging.info("Stream %s: first seq=%d; %d earlier frames unavailable", stream_id, seq, seq - 1)
+                        logging.info("Server tare ready: %d frames, first %d skipped; saving corrected counts.",
+                                     frame["tare"]["frames"], frame["tare"]["skip"])
                     stats = streams[stream_id]
+                    if frame["tare"] != stats["tare"]:
+                        raise ValueError("Tare changed within a stream; restart the server for a new tare")
                     if seq <= stats["last_seq"]:
                         raise ValueError(f"Duplicate or backwards seq={seq} in stream {stream_id}")
                     gap = seq - stats["last_seq"] - 1
@@ -189,7 +200,7 @@ def record(stop, port=DEFAULT_PORT):
                     writer.writerow([
                         stream_id, seq, frame["timestamp_ns"], frame["source_monotonic_ns"],
                         received_ns, received_mono_ns,
-                        *(value for values in frame["raw"] for value in values),
+                        *(value for values in frame["tared"] for value in values),
                     ])
                     stats["last_seq"] = seq
                     stats["rows_written"] += 1
@@ -218,13 +229,13 @@ def record(stop, port=DEFAULT_PORT):
             metadata["pending_frames_not_written"] = receiver.frames.qsize()
             csv_file.flush()
             save_metadata(metadata_file, metadata)
-            logging.info("Saved %d raw frames to %s", metadata["rows_written"], csv_path)
+            logging.info("Saved %d tared frames to %s", metadata["rows_written"], csv_path)
     return csv_path
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Record raw CoinFT ZMQ messages to CSV and JSON.",
+        description="Record server-tared CoinFT ZMQ messages to CSV and JSON.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="G1 server's ZMQ TCP port")

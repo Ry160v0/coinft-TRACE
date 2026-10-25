@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "status": "converted",
+  "csv_file": "coinft_force_20261023T154300_629940Z.csv",
+  "source_csv": "/mnt/d/Desktop/CoinFT/coinft-TRACE/deployment/raw_data/coinft_raw_20261023T152428_296633Z.csv",
+  "source_metadata": "/mnt/d/Desktop/CoinFT/coinft-TRACE/deployment/raw_data/coinft_raw_20261023T152428_296633Z.json",
+  "sensors": [
+    [
+      "CFT1",
+      "CFT24_C1"
+    ],
+    [
+      "CFT2",
+      "CFT24_C3"
+    ]
+  ],
+  "force_axes_per_sensor": 6,
+  "csv_columns": [
+    "stream_id",
+    "seq",
+    "timestamp_ns",
+    "source_monotonic_ns",
+    "received_timestamp_ns",
+    "received_monotonic_ns",
+    "processing_status",
+    "CFT1_Fx",
+    "CFT1_Fy",
+    "CFT1_Fz",
+    "CFT1_Mx",
+    "CFT1_My",
+    "CFT1_Mz",
+    "CFT2_Fx",
+    "CFT2_Fy",
+    "CFT2_Fz",
+    "CFT2_Mx",
+    "CFT2_My",
+    "CFT2_Mz"
+  ],
+  "rows_written": 1360,
+  "rows_with_force": 860,
+  "missing_frames": 0,
+  "processing": {
+    "pipeline": "raw - tare -> normalize -> ONNX -> denormalize -> causal moving average",
+    "tare_frames": 500,
+    "tare_skip_first": 10,
+    "moving_average_window": 30,
+    "on_missing_seq": "reset averaging; never interpolate",
+    "baseline_rows": "force columns blank, processing_status=tare",
+    "force_units": "training labels; check model-specific moment units"
+  },
+  "model_files": {
+    "CFT1": {
+      "calibration_id": "CFT24_C1",
+      "model": "/mnt/d/Desktop/CoinFT/coinft-TRACE/deployment/hardware_configs/CFT24_C1_MLP.onnx",
+      "normalization": "/mnt/d/Desktop/CoinFT/coinft-TRACE/deployment/hardware_configs/CFT24_C1_norm.json"
+    },
+    "CFT2": {
+      "calibration_id": "CFT24_C3",
+      "model": "/mnt/d/Desktop/CoinFT/coinft-TRACE/deployment/hardware_configs/CFT24_C3_MLP.onnx",
+      "normalization": "/mnt/d/Desktop/CoinFT/coinft-TRACE/deployment/hardware_configs/CFT24_C3_norm.json"
+    }
+  },
+  "time_fields": {
+    "timestamp_ns": "G1 Unix ns at complete USB reception, before decoding",
+    "source_monotonic_ns": "G1 monotonic ns at complete USB reception",
+    "received_timestamp_ns": "PC Unix ns after ZMQ recv, before JSON decoding",
+    "received_monotonic_ns": "PC monotonic ns after ZMQ recv"
+  },
+  "streams": {
+    "56dc02fc42c444efba26b6b10f0cd318": {
+      "rows_written": 1360,
+      "first_seq": 55669,
+      "last_seq": 57028,
+      "missing_frames": 0,
+      "tare_raw_offsets": {
+        "CFT1": [
+          5051.281632653061,
+          23508.448979591838,
+          27390.55306122449,
+          24087.948979591838,
+          26974.15918367347,
+          27924.377551020407,
+          22350.11224489796,
+          19341.82448979592,
+          21726.126530612244,
+          26006.651020408164,
+          27448.695918367346,
+          19406.98979591837
+        ],
+        "CFT2": [
+          18465.538775510206,
+          18583.069387755102,
+          23934.932653061223,
+          21900.591836734693,
+          23094.508163265305,
+          18988.593877551022,
+          23024.616326530613,
+          13969.16530612245,
+          17001.01632653061,
+          23265.23469387755,
+          21339.38163265306,
+          17402.12448979592
+        ]
+      }
+    }
+  },
+  "converted_timestamp_ns": 1792770180844988906
+}

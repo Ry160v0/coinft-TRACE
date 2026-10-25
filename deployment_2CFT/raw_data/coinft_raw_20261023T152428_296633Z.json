@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "status": "stopped",
+  "endpoint": "tcp://192.168.123.164:5560",
+  "csv_file": "coinft_raw_20261023T152428_296633Z.csv",
+  "recorder_host": "TRACE-5090-1",
+  "started_timestamp_ns": 1792769068296652198,
+  "sensors": [
+    [
+      "CFT1",
+      "CFT24_C1"
+    ],
+    [
+      "CFT2",
+      "CFT24_C3"
+    ]
+  ],
+  "channels_per_sensor": 12,
+  "raw_format": "Unmodified uint16 channel values, in USB packet order",
+  "processing": "None; record an unloaded baseline for later tare/inference",
+  "clock_sync": "External; not configured or verified by this program",
+  "time_fields": {
+    "timestamp_ns": "G1 Unix ns at complete USB reception, before decoding",
+    "source_monotonic_ns": "G1 monotonic ns at complete USB reception",
+    "received_timestamp_ns": "PC Unix ns after ZMQ recv, before JSON decoding",
+    "received_monotonic_ns": "PC monotonic ns after ZMQ recv"
+  },
+  "transport": "ZMQ PUB/SUB JSON; no acknowledgement or replay",
+  "receive_hwm": 8192,
+  "queue_size": 8192,
+  "flush_interval_s": 1.0,
+  "rows_written": 1360,
+  "missing_frames": 0,
+  "streams": {
+    "56dc02fc42c444efba26b6b10f0cd318": {
+      "first_seq": 55669,
+      "last_seq": 57028,
+      "frames_before_subscription": 55668,
+      "rows_written": 1360,
+      "missing_frames": 0
+    }
+  },
+  "csv_columns": [
+    "stream_id",
+    "seq",
+    "timestamp_ns",
+    "source_monotonic_ns",
+    "received_timestamp_ns",
+    "received_monotonic_ns",
+    "CFT1_ch01",
+    "CFT1_ch02",
+    "CFT1_ch03",
+    "CFT1_ch04",
+    "CFT1_ch05",
+    "CFT1_ch06",
+    "CFT1_ch07",
+    "CFT1_ch08",
+    "CFT1_ch09",
+    "CFT1_ch10",
+    "CFT1_ch11",
+    "CFT1_ch12",
+    "CFT2_ch01",
+    "CFT2_ch02",
+    "CFT2_ch03",
+    "CFT2_ch04",
+    "CFT2_ch05",
+    "CFT2_ch06",
+    "CFT2_ch07",
+    "CFT2_ch08",
+    "CFT2_ch09",
+    "CFT2_ch10",
+    "CFT2_ch11",
+    "CFT2_ch12"
+  ],
+  "ended_timestamp_ns": 1792769075177002505,
+  "receive_stalls": 0,
+  "pending_frames_not_written": 0
+}
