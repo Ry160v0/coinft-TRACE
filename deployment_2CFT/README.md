@@ -1,22 +1,16 @@
 ## Dependencies
 
-On G1 (server):
+On G1 (server & data processor):
 
 ```bash
-python3 -m pip install pyserial pyzmq
+python3 -m pip install pyserial pyzmq numpy onnxruntime
 ```
 
-On PC (recorder/client):
-
+On PC:
 ```bash
-python -m pip install pyzmq
+python -m pip install pyzmq numpy onnxruntime
 ```
 
-For offline conversion on PC:
-
-```bash
-python -m pip install numpy onnxruntime
-```
 
 ## Launch Recorder
 
